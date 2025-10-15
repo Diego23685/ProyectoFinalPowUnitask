@@ -1,0 +1,61 @@
+.page{min-height:100%;display:grid;place-items:center;padding:24px}
+.card{width:100%;max-width:420px;background:#111827;color:#e5e7eb;border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:28px;display:grid;gap:12px}
+h1{margin:0 0 4px 0;font-size:22px}
+label{font-size:14px;color:#cbd5e1}
+input[type=email],input[type=password]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:#e5e7eb;outline:none}
+input[type=email]:focus,input[type=password]:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,.25)}
+.row{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+.remember{display:flex;align-items:center;gap:8px;font-size:14px;color:#cbd5e1}
+.link{font-size:14px;color:#93c5fd;text-decoration:none}
+.link:hover{text-decoration:underline}
+button{margin-top:8px;width:100%;padding:12px 14px;border-radius:10px;border:0;background:#2563eb;color:#fff;font-weight:600;cursor:pointer}
+button:hover{filter:brightness(1.05)}
+.status{margin:8px 0 0 0;font-size:14px;color:#a7f3d0}
+.hint{margin:0;font-size:12px;color:#9ca3af}
+
+/* ====== Tutorial Overlay ====== */
+.tour__backdrop{
+  position: fixed;
+  inset: 0;
+  /*background: rgba(5, 16, 61, 0.65);*/
+  /*backdrop-filter: blur(2px);*/
+  z-index: 1000;
+}
+.tour__spotlight{
+  position: absolute;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 9999px rgba(2,6,23,.65),
+    0 8px 30px rgba(0,0,0,.35),
+    inset 0 0 0 2px rgba(96,165,250,.9);
+  pointer-events: none;
+}
+.tour__popover{
+  position: absolute;
+  max-width: 420px;
+}
+.tour__title{
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+.tour__body{
+  color: #cbd5e1;
+  font-size: 14px;
+}
+.tour__footer{
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+.tour__dots{
+  display: flex; gap: 6px;
+}
+.tour__dot{
+  width: 8px; height: 8px; border-radius: 999px; background: #334155;
+}
+.tour__dot.active{
+  background: #60a5fa;
+}
