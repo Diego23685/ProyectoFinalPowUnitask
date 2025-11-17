@@ -22,12 +22,9 @@ namespace ContaditoAuthBackend.Controllers
             _cfg = cfg;
         }
 
-        // ============================
-        // DTOs
-        // ============================
         public class GoogleLoginDto
         {
-            public string Credential { get; set; } = string.Empty; // id_token
+            public string Credential { get; set; } = string.Empty;
         }
 
         public class RegisterDto
@@ -48,10 +45,6 @@ namespace ContaditoAuthBackend.Controllers
             public Guid UsuarioId { get; set; }
         }
 
-        // ============================
-        // REGISTER (LOCAL)
-        // POST /auth/register
-        // ============================
         [HttpPost("register")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -88,7 +81,6 @@ namespace ContaditoAuthBackend.Controllers
 
             var jwt = JwtHelper.CreateJwt(user, _cfg);
 
-            // Cookie HTTP-only
             Response.Cookies.Append("auth_token", jwt, new CookieOptions
             {
                 HttpOnly = true,
@@ -111,10 +103,6 @@ namespace ContaditoAuthBackend.Controllers
             });
         }
 
-        // ============================
-        // LOGIN (LOCAL)
-        // POST /auth/login
-        // ============================
         [HttpPost("login")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -124,7 +112,6 @@ namespace ContaditoAuthBackend.Controllers
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(dto.Password))
                 return Unauthorized(new { message = "Credenciales inválidas" });
 
-            // Solo usuarios locales (no Google)
             var user = await _db.Usuarios
                 .FirstOrDefaultAsync(u => u.Email == email && u.AuthProvider == "local");
 
@@ -162,10 +149,6 @@ namespace ContaditoAuthBackend.Controllers
             });
         }
 
-        // ============================
-        // GOOGLE LOGIN
-        // POST /auth/google
-        // ============================
         [HttpPost("google")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -192,16 +175,13 @@ namespace ContaditoAuthBackend.Controllers
             var googleSub = payload.Subject;
             var email = (payload.Email ?? string.Empty).Trim().ToLower();
 
-            // 1) Buscar por google_sub
             var user = await _db.Usuarios.FirstOrDefaultAsync(u => u.GoogleSub == googleSub);
 
-            // 2) Vincular por email si ya existe localmente
             if (user == null && !string.IsNullOrEmpty(email))
             {
                 user = await _db.Usuarios.FirstOrDefaultAsync(u => u.Email == email);
             }
 
-            // 3) Crear si no existe
             if (user == null)
             {
                 user = new Usuario
@@ -236,12 +216,11 @@ namespace ContaditoAuthBackend.Controllers
 
             var jwt = JwtHelper.CreateJwt(user, _cfg);
 
-            // Cookie HTTP-Only
             Response.Cookies.Append("auth_token", jwt, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true,                 // en prod debe ser true
-                SameSite = SameSiteMode.None,  // si el front está en otro dominio
+                Secure = true,
+                SameSite = SameSiteMode.None,
                 Expires = DateTimeOffset.UtcNow.AddDays(7)
             });
 
@@ -259,10 +238,6 @@ namespace ContaditoAuthBackend.Controllers
             });
         }
 
-        // ============================
-        // IMPERSONAR (solo admin)
-        // POST /auth/impersonar
-        // ============================
         [HttpPost("impersonar")]
         [Authorize]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
@@ -276,7 +251,6 @@ namespace ContaditoAuthBackend.Controllers
             if (!Guid.TryParse(uidStr, out var adminId))
                 return Unauthorized(new { message = "Token inválido (sin uid)" });
 
-            // 🔐 Seguridad real: solo admin puede impersonar
             if (rol != "admin")
                 return Forbid();
 
@@ -286,7 +260,6 @@ namespace ContaditoAuthBackend.Controllers
 
             var jwt = JwtHelper.CreateJwt(target, _cfg, impersonatedBy: adminId);
 
-            // Podés también ponerlo en cookie para que siga igual que el login
             Response.Cookies.Append("auth_token", jwt, new CookieOptions
             {
                 HttpOnly = true,

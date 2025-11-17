@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "http://localhost:5000"
 
 export default function GoogleButton({ onResult, onLoginUser }) {
   const btnRef = useRef(null);
@@ -10,13 +10,13 @@ export default function GoogleButton({ onResult, onLoginUser }) {
     if (!window.google) return;
 
     google.accounts.id.initialize({
-      client_id: "176878448068-jsbaph76oa4kr265cvg409inv0h8pq1u.apps.googleusercontent.com",
+      client_id: "tucliente.apps.googleusercontent.com",
       callback: async (response) => {
         try {
           const res = await fetch(`${API_BASE}/auth/google`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            // credentials: "include", // si decides usar cookie httpOnly
+           
             body: JSON.stringify({ credential: response.credential })
           });
 
@@ -33,7 +33,7 @@ export default function GoogleButton({ onResult, onLoginUser }) {
           const token = payload?.token;
 
           if (user) {
-            // Guarda sesión
+            
             localStorage.setItem("user", JSON.stringify(user));
             if (token) localStorage.setItem("auth_token", token);
 

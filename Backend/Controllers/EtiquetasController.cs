@@ -14,8 +14,6 @@ namespace ContaditoAuthBackend.Controllers
         private readonly ApplicationDbContext _db;
         public EtiquetasController(ApplicationDbContext db) { _db = db; }
 
-        // LEGACY / ADMIN:
-        // GET /etiquetas?usuario_id=GUID
         [HttpGet]
         [Authorize]
         public async Task<IActionResult> List([FromQuery] Guid usuario_id)
@@ -26,7 +24,6 @@ namespace ContaditoAuthBackend.Controllers
             if (!Guid.TryParse(uidStr, out var userId))
                 return Unauthorized(new { message = "Token inválido (sin uid)" });
 
-            // si no es admin, solo puede ver sus propias etiquetas
             if (rol != "admin" && userId != usuario_id)
                 return Forbid();
 
@@ -38,7 +35,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(list);
         }
 
-        // NUEVO: GET /etiquetas/mias (usa uid del token, más simple para el front)
         [HttpGet("mias")]
         [Authorize]
         public async Task<IActionResult> ListMine()
@@ -55,7 +51,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(list);
         }
 
-        // DTO para crear etiqueta
         public class CreateEtiquetaDto
         {
             public Guid UsuarioId { get; set; }
@@ -63,7 +58,6 @@ namespace ContaditoAuthBackend.Controllers
             public string? ColorHex { get; set; }
         }
 
-        // POST /etiquetas
         [HttpPost]
         [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateEtiquetaDto dto)
@@ -77,7 +71,6 @@ namespace ContaditoAuthBackend.Controllers
             if (!Guid.TryParse(uidStr, out var userId))
                 return Unauthorized(new { message = "Token inválido (sin uid)" });
 
-            // si no es admin, ignora el usuario que venga en el body
             if (rol != "admin")
                 dto.UsuarioId = userId;
 

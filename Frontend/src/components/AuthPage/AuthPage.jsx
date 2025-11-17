@@ -1,30 +1,30 @@
 import React, { useEffect, useState } from "react";
 import GoogleButton from "./GoogleButton";
-import "./auth.css"; // pega ahí el CSS de la plantilla
+import "./auth.css"; 
 
-// Soporta Vite (import.meta.env) y CRA/Webpack (process.env.REACT_APP_API_URL)
+
 const API_BASE =
   (typeof import.meta !== "undefined" &&
     import.meta.env &&
     import.meta.env.VITE_API_URL) ||
   process.env.REACT_APP_API_URL ||
-  "http://localhost:5000";
+  "http://localhost:5000"
 
 
 export default function AuthPage({ onLoginSuccess }) {
-  const [mode, setMode] = useState("login"); // "login" | "register"
+  const [mode, setMode] = useState("login"); 
   const [status, setStatus] = useState("");
 
-  // Campos login
+  
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Campos register
+  
   const [regNombre, setRegNombre] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
 
-  // Simula el comportamiento de widthpage() de tu JS original
+  
   const [isWide, setIsWide] = useState(window.innerWidth > 850);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function AuthPage({ onLoginSuccess }) {
       const resp = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // importante para cookie httpOnly
+        credentials: "include", 
         body: JSON.stringify({
           email: loginEmail,
           password: loginPassword,
@@ -94,7 +94,7 @@ export default function AuthPage({ onLoginSuccess }) {
 
       setStatus(`Cuenta creada, bienvenido ${data.user.nombre || data.user.email} ✅`);
       onLoginSuccess?.(data.user);
-      // Si querés, cambia automáticamente a modo login
+      
       setMode("login");
     } catch (err) {
       console.error(err);
@@ -102,7 +102,7 @@ export default function AuthPage({ onLoginSuccess }) {
     }
   };
 
-  // Estilos de desplazamiento imitando tu script original
+  
   const containerStyle = {
     left:
       isWide

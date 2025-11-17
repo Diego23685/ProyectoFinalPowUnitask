@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ContaditoAuthBackend.Models
 {
-    [Table("recordatorio_tarea")] // 👈 nombre real en MySQL
+    [Table("recordatorio_tarea")]
     public class RecordatorioTarea
     {
         [Key]

@@ -1,4 +1,3 @@
-// Controllers/RecordatoriosController.cs
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,10 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
-using ContaditoAuthBackend.Data;          // 👈 ajusta si tu DbContext está en otro namespace
-using ContaditoAuthBackend.Models;        // 👈 donde está RecordatorioTarea / Tarea / Materia / Usuario
+using ContaditoAuthBackend.Data;
+using ContaditoAuthBackend.Models;
 
-namespace ContaditoAuthBackend.Controllers  // 👈 usa el namespace real de tus otros controllers
+namespace ContaditoAuthBackend.Controllers
 {
     [ApiController]
     [Route("tareas/{tareaId:guid}/recordatorios")]
@@ -25,7 +24,8 @@ namespace ContaditoAuthBackend.Controllers  // 👈 usa el namespace real de tus
             var rs = await _db.Recordatorios
                 .Where(r => r.TareaId == tareaId && r.Activo)
                 .OrderBy(r => r.MinutosAntes)
-                .Select(r => new {
+                .Select(r => new
+                {
                     id = r.Id,
                     minutos_antes = r.MinutosAntes,
                     activo = r.Activo,
@@ -59,7 +59,8 @@ namespace ContaditoAuthBackend.Controllers  // 👈 usa el namespace real de tus
             _db.Recordatorios.Add(r);
             await _db.SaveChangesAsync();
 
-            return Ok(new {
+            return Ok(new
+            {
                 id = r.Id,
                 minutos_antes = r.MinutosAntes,
                 activo = r.Activo,

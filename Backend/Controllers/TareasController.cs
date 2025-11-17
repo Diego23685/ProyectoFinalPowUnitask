@@ -1,4 +1,3 @@
-// Controllers/TareasController.cs
 using System.Security.Claims;
 using ContaditoAuthBackend.Data;
 using ContaditoAuthBackend.Models;
@@ -10,13 +9,12 @@ namespace ContaditoAuthBackend.Controllers
 {
     [ApiController]
     [Route("tareas")]
-    [Authorize] // 👈 aquí exigimos estar autenticado, pero NO rol específico
+    [Authorize]
     public class TareasController : ControllerBase
     {
         private readonly ApplicationDbContext _db;
         public TareasController(ApplicationDbContext db) { _db = db; }
 
-        // ====== DTOs ======
         public class CreateTareaDto
         {
             public Guid Materia_id { get; set; }
@@ -37,26 +35,20 @@ namespace ContaditoAuthBackend.Controllers
             public bool? Eliminada { get; set; }
         }
 
-        // ====== LIST ======
-        // GET /tareas   (ya NO necesitamos ?usuario_id)
         [HttpGet]
         public async Task<IActionResult> List()
         {
-            // Sacar el userId del JWT
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!Guid.TryParse(userIdStr, out var userId))
             {
-                // Si por alguna razón el token no trae GUID válido:
                 return Forbid();
             }
 
-            // Materias del usuario autenticado
             var materiaIds = await _db.Materias
                 .Where(m => m.UsuarioId == userId && m.Estado == "activo")
                 .Select(m => m.Id)
                 .ToListAsync();
 
-            // Tareas asociadas a esas materias
             var tareas = await _db.Tareas
                 .Where(t => materiaIds.Contains(t.MateriaId) && !t.Eliminada)
                 .OrderBy(t => t.VenceEn)
@@ -108,7 +100,6 @@ namespace ContaditoAuthBackend.Controllers
             public string? color_hex { get; set; }
         }
 
-        // ====== CREATE ======
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateTareaDto dto)
         {
@@ -155,7 +146,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(outDto);
         }
 
-        // ====== PATCH ======
         [HttpPatch("{id:guid}")]
         public async Task<IActionResult> Patch(Guid id, [FromBody] PatchTareaDto dto)
         {
@@ -192,7 +182,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(outDto);
         }
 
-        // ====== etiquetas N:M ======
         [HttpPost("{id:guid}/etiquetas/{etiquetaId:guid}")]
         public async Task<IActionResult> AddEtiqueta(Guid id, Guid etiquetaId)
         {
@@ -209,7 +198,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(new { ok = true });
         }
 
-        // ====== DELETE (soft delete) ======
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {

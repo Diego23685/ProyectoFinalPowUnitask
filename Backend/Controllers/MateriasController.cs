@@ -14,7 +14,6 @@ namespace ContaditoAuthBackend.Controllers
         private readonly ApplicationDbContext _db;
         public MateriasController(ApplicationDbContext db) { _db = db; }
 
-        // --------- DTOs ----------
         public class CreateMateriaDto
         {
             public string Nombre { get; set; } = "";
@@ -23,10 +22,9 @@ namespace ContaditoAuthBackend.Controllers
         public class UpdateMateriaDto
         {
             public string? Nombre { get; set; }
-            public string? Estado { get; set; }   // opcional: por si querés cambiar estado
+            public string? Estado { get; set; }
         }
 
-        // GET /materias?usuario_id=GUID  (legacy: sigue soportado)
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] Guid usuario_id)
         {
@@ -38,7 +36,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(materias);
         }
 
-        // GET /materias/mias  (seguro: usa uid del token)
         [HttpGet("mias")]
         [Authorize]
         public async Task<IActionResult> ListMine()
@@ -55,7 +52,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(materias);
         }
 
-        // POST /materias  (crea usando uid del token)
         [HttpPost]
         [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateMateriaDto dto)
@@ -92,7 +88,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(m);
         }
 
-        // PATCH /materias/{id}  (renombrar / cambiar estado)
         [HttpPatch("{id:guid}")]
         [Authorize]
         public async Task<IActionResult> Patch(Guid id, [FromBody] UpdateMateriaDto dto)
@@ -107,7 +102,6 @@ namespace ContaditoAuthBackend.Controllers
             if (materia == null)
                 return NotFound(new { message = "Materia no encontrada" });
 
-            // Renombrar
             if (!string.IsNullOrWhiteSpace(dto.Nombre))
             {
                 var nuevoNombre = dto.Nombre.Trim();
@@ -124,7 +118,6 @@ namespace ContaditoAuthBackend.Controllers
                 materia.Nombre = nuevoNombre;
             }
 
-            // Cambio de estado opcional (por ejemplo "activo" / "eliminada")
             if (!string.IsNullOrWhiteSpace(dto.Estado))
             {
                 materia.Estado = dto.Estado.Trim().ToLower() == "eliminada"
@@ -138,7 +131,6 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(materia);
         }
 
-        // DELETE /materias/{id}  (soft delete: Estado = "eliminada")
         [HttpDelete("{id:guid}")]
         [Authorize]
         public async Task<IActionResult> Delete(Guid id)
@@ -153,7 +145,6 @@ namespace ContaditoAuthBackend.Controllers
             if (materia == null)
                 return NotFound(new { message = "Materia no encontrada" });
 
-            // Soft delete
             materia.Estado = "eliminada";
             materia.ActualizadoEn = DateTime.UtcNow;
 

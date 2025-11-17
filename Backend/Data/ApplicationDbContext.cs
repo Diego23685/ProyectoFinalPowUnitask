@@ -19,7 +19,6 @@ namespace ContaditoAuthBackend.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // ===================== USUARIO =====================
             var u = modelBuilder.Entity<Usuario>();
 
             u.ToTable("usuario");
@@ -67,7 +66,6 @@ namespace ContaditoAuthBackend.Data
             u.HasIndex(x => x.Email).IsUnique();
             u.HasIndex(x => x.GoogleSub).IsUnique();
 
-            // ===================== MATERIA =====================
             var m = modelBuilder.Entity<Materia>();
 
             m.ToTable("materia");
@@ -99,7 +97,6 @@ namespace ContaditoAuthBackend.Data
 
             m.HasIndex(x => new { x.UsuarioId, x.Nombre }).IsUnique();
 
-            // ===================== TAREA =====================
             var t = modelBuilder.Entity<Tarea>();
 
             t.ToTable("tarea");
@@ -144,7 +141,6 @@ namespace ContaditoAuthBackend.Data
               .HasForeignKey(x => x.MateriaId)
               .OnDelete(DeleteBehavior.Cascade);
 
-            // ===================== ETIQUETA =====================
             var e = modelBuilder.Entity<Etiqueta>();
 
             e.ToTable("etiqueta");
@@ -176,7 +172,6 @@ namespace ContaditoAuthBackend.Data
 
             e.HasIndex(x => new { x.UsuarioId, x.Nombre }).IsUnique();
 
-            // ===================== TAREA_ETIQUETA =====================
             var te = modelBuilder.Entity<TareaEtiqueta>();
 
             te.ToTable("tarea_etiqueta");
@@ -204,7 +199,6 @@ namespace ContaditoAuthBackend.Data
               .HasForeignKey(x => x.EtiquetaId)
               .OnDelete(DeleteBehavior.Cascade);
 
-            // ===================== RECORDATORIO_TAREA =====================
             var r = modelBuilder.Entity<RecordatorioTarea>();
 
             r.ToTable("recordatorio_tarea");

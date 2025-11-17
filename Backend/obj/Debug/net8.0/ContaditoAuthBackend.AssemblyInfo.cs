@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ContaditoAuthBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5cc0911f93456f339faed1bb58276462397cfc91")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+198b707f59e454f19e929407577853f80eece6ec")]
 [assembly: System.Reflection.AssemblyProductAttribute("ContaditoAuthBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ContaditoAuthBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
