@@ -15,14 +15,23 @@ namespace ContaditoAuthBackend.Controllers
         public MateriasController(ApplicationDbContext db) { _db = db; }
 
         // --------- DTOs ----------
-        public class CreateMateriaDto { public string Nombre { get; set; } = ""; }
+        public class CreateMateriaDto
+        {
+            public string Nombre { get; set; } = "";
+        }
+
+        public class UpdateMateriaDto
+        {
+            public string? Nombre { get; set; }
+            public string? Estado { get; set; }   // opcional: por si querés cambiar estado
+        }
 
         // GET /materias?usuario_id=GUID  (legacy: sigue soportado)
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] Guid usuario_id)
         {
             var materias = await _db.Materias
-                .Where(m => m.UsuarioId == usuario_id)
+                .Where(m => m.UsuarioId == usuario_id && m.Estado == "activo")
                 .OrderByDescending(m => m.CreadoEn)
                 .ToListAsync();
 
@@ -39,7 +48,7 @@ namespace ContaditoAuthBackend.Controllers
                 return Unauthorized(new { message = "Token inválido (sin uid)" });
 
             var materias = await _db.Materias
-                .Where(m => m.UsuarioId == userId)
+                .Where(m => m.UsuarioId == userId && m.Estado == "activo")
                 .OrderByDescending(m => m.CreadoEn)
                 .ToListAsync();
 
@@ -58,8 +67,12 @@ namespace ContaditoAuthBackend.Controllers
             if (!Guid.TryParse(uidStr, out var userId))
                 return Unauthorized(new { message = "Token inválido (sin uid)" });
 
+            var nombre = dto.Nombre.Trim();
+
             var exists = await _db.Materias.AnyAsync(m =>
-                m.UsuarioId == userId && m.Nombre == dto.Nombre && m.Estado == "activo");
+                m.UsuarioId == userId &&
+                m.Nombre == nombre &&
+                m.Estado == "activo");
 
             if (exists)
                 return Conflict(new { message = "Ya existe una materia con ese nombre" });
@@ -68,7 +81,7 @@ namespace ContaditoAuthBackend.Controllers
             {
                 Id = Guid.NewGuid(),
                 UsuarioId = userId,
-                Nombre = dto.Nombre.Trim(),
+                Nombre = nombre,
                 Estado = "activo",
                 CreadoEn = DateTime.UtcNow,
                 ActualizadoEn = DateTime.UtcNow
@@ -77,6 +90,75 @@ namespace ContaditoAuthBackend.Controllers
             _db.Materias.Add(m);
             await _db.SaveChangesAsync();
             return Ok(m);
+        }
+
+        // PATCH /materias/{id}  (renombrar / cambiar estado)
+        [HttpPatch("{id:guid}")]
+        [Authorize]
+        public async Task<IActionResult> Patch(Guid id, [FromBody] UpdateMateriaDto dto)
+        {
+            var uidStr = User.FindFirstValue("uid");
+            if (!Guid.TryParse(uidStr, out var userId))
+                return Unauthorized(new { message = "Token inválido (sin uid)" });
+
+            var materia = await _db.Materias
+                .FirstOrDefaultAsync(m => m.Id == id && m.UsuarioId == userId);
+
+            if (materia == null)
+                return NotFound(new { message = "Materia no encontrada" });
+
+            // Renombrar
+            if (!string.IsNullOrWhiteSpace(dto.Nombre))
+            {
+                var nuevoNombre = dto.Nombre.Trim();
+
+                var nameExists = await _db.Materias.AnyAsync(m =>
+                    m.UsuarioId == userId &&
+                    m.Id != id &&
+                    m.Nombre == nuevoNombre &&
+                    m.Estado == "activo");
+
+                if (nameExists)
+                    return Conflict(new { message = "Ya existe otra materia con ese nombre" });
+
+                materia.Nombre = nuevoNombre;
+            }
+
+            // Cambio de estado opcional (por ejemplo "activo" / "eliminada")
+            if (!string.IsNullOrWhiteSpace(dto.Estado))
+            {
+                materia.Estado = dto.Estado.Trim().ToLower() == "eliminada"
+                    ? "eliminada"
+                    : dto.Estado.Trim();
+            }
+
+            materia.ActualizadoEn = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return Ok(materia);
+        }
+
+        // DELETE /materias/{id}  (soft delete: Estado = "eliminada")
+        [HttpDelete("{id:guid}")]
+        [Authorize]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            var uidStr = User.FindFirstValue("uid");
+            if (!Guid.TryParse(uidStr, out var userId))
+                return Unauthorized(new { message = "Token inválido (sin uid)" });
+
+            var materia = await _db.Materias
+                .FirstOrDefaultAsync(m => m.Id == id && m.UsuarioId == userId);
+
+            if (materia == null)
+                return NotFound(new { message = "Materia no encontrada" });
+
+            // Soft delete
+            materia.Estado = "eliminada";
+            materia.ActualizadoEn = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return Ok(new { message = "Materia eliminada", materia.Id });
         }
     }
 }

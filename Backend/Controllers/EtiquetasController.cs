@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using ContaditoAuthBackend.Data;
 using ContaditoAuthBackend.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,27 +14,78 @@ namespace ContaditoAuthBackend.Controllers
         private readonly ApplicationDbContext _db;
         public EtiquetasController(ApplicationDbContext db) { _db = db; }
 
+        // LEGACY / ADMIN:
         // GET /etiquetas?usuario_id=GUID
         [HttpGet]
+        [Authorize]
         public async Task<IActionResult> List([FromQuery] Guid usuario_id)
         {
+            var uidStr = User.FindFirstValue("uid");
+            var rol = User.FindFirstValue("rol") ?? "usuario";
+
+            if (!Guid.TryParse(uidStr, out var userId))
+                return Unauthorized(new { message = "Token inválido (sin uid)" });
+
+            // si no es admin, solo puede ver sus propias etiquetas
+            if (rol != "admin" && userId != usuario_id)
+                return Forbid();
+
             var list = await _db.Etiquetas
                 .Where(e => e.UsuarioId == usuario_id)
                 .OrderBy(e => e.Nombre)
                 .ToListAsync();
+
             return Ok(list);
         }
 
+        // NUEVO: GET /etiquetas/mias (usa uid del token, más simple para el front)
+        [HttpGet("mias")]
+        [Authorize]
+        public async Task<IActionResult> ListMine()
+        {
+            var uidStr = User.FindFirstValue("uid");
+            if (!Guid.TryParse(uidStr, out var userId))
+                return Unauthorized(new { message = "Token inválido (sin uid)" });
+
+            var list = await _db.Etiquetas
+                .Where(e => e.UsuarioId == userId)
+                .OrderBy(e => e.Nombre)
+                .ToListAsync();
+
+            return Ok(list);
+        }
+
+        // DTO para crear etiqueta
+        public class CreateEtiquetaDto
+        {
+            public Guid UsuarioId { get; set; }
+            public string Nombre { get; set; } = "";
+            public string? ColorHex { get; set; }
+        }
+
         // POST /etiquetas
-        public class CreateEtiquetaDto { public Guid UsuarioId { get; set; } public string Nombre { get; set; } = ""; public string? ColorHex { get; set; } }
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateEtiquetaDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Nombre))
                 return BadRequest(new { message = "Nombre requerido" });
 
-            var exists = await _db.Etiquetas.AnyAsync(e => e.UsuarioId == dto.UsuarioId && e.Nombre == dto.Nombre);
-            if (exists) return Conflict(new { message = "Ya existe una etiqueta con ese nombre" });
+            var uidStr = User.FindFirstValue("uid");
+            var rol = User.FindFirstValue("rol") ?? "usuario";
+
+            if (!Guid.TryParse(uidStr, out var userId))
+                return Unauthorized(new { message = "Token inválido (sin uid)" });
+
+            // si no es admin, ignora el usuario que venga en el body
+            if (rol != "admin")
+                dto.UsuarioId = userId;
+
+            var exists = await _db.Etiquetas.AnyAsync(e =>
+                e.UsuarioId == dto.UsuarioId && e.Nombre == dto.Nombre);
+
+            if (exists)
+                return Conflict(new { message = "Ya existe una etiqueta con ese nombre" });
 
             var e = new Etiqueta
             {
@@ -43,8 +96,10 @@ namespace ContaditoAuthBackend.Controllers
                 CreadoEn = DateTime.UtcNow,
                 ActualizadoEn = DateTime.UtcNow
             };
+
             _db.Etiquetas.Add(e);
             await _db.SaveChangesAsync();
+
             return Ok(e);
         }
     }

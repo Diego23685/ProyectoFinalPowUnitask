@@ -1,6 +1,8 @@
 // Controllers/TareasController.cs
+using System.Security.Claims;
 using ContaditoAuthBackend.Data;
 using ContaditoAuthBackend.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +10,7 @@ namespace ContaditoAuthBackend.Controllers
 {
     [ApiController]
     [Route("tareas")]
+    [Authorize] // 👈 aquí exigimos estar autenticado, pero NO rol específico
     public class TareasController : ControllerBase
     {
         private readonly ApplicationDbContext _db;
@@ -23,27 +26,37 @@ namespace ContaditoAuthBackend.Controllers
             public string Prioridad { get; set; } = "Media";
         }
 
-        // DTO para PATCH: todo opcional
         public class PatchTareaDto
         {
             public string? Titulo { get; set; }
             public string? Descripcion { get; set; }
             public DateTime? Vence_en { get; set; }
-            public string? Prioridad { get; set; }   // "Alta" | "Media" | "Baja"
+            public string? Prioridad { get; set; }
             public bool? Completada { get; set; }
             public bool? Silenciada { get; set; }
             public bool? Eliminada { get; set; }
         }
 
         // ====== LIST ======
+        // GET /tareas   (ya NO necesitamos ?usuario_id)
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] Guid usuario_id)
+        public async Task<IActionResult> List()
         {
+            // Sacar el userId del JWT
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(userIdStr, out var userId))
+            {
+                // Si por alguna razón el token no trae GUID válido:
+                return Forbid();
+            }
+
+            // Materias del usuario autenticado
             var materiaIds = await _db.Materias
-                .Where(m => m.UsuarioId == usuario_id && m.Estado == "activo")
+                .Where(m => m.UsuarioId == userId && m.Estado == "activo")
                 .Select(m => m.Id)
                 .ToListAsync();
 
+            // Tareas asociadas a esas materias
             var tareas = await _db.Tareas
                 .Where(t => materiaIds.Contains(t.MateriaId) && !t.Eliminada)
                 .OrderBy(t => t.VenceEn)
@@ -80,7 +93,9 @@ namespace ContaditoAuthBackend.Controllers
                 eliminada = t.Eliminada,
                 creado_en = t.CreadoEn,
                 actualizado_en = t.ActualizadoEn,
-                etiquetas = etiquetasPorTarea.TryGetValue(t.Id, out var list) ? list : new List<EtiquetaOut>()
+                etiquetas = etiquetasPorTarea.TryGetValue(t.Id, out var list)
+                    ? list
+                    : new List<EtiquetaOut>()
             });
 
             return Ok(result);
@@ -140,7 +155,7 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(outDto);
         }
 
-        // ====== PATCH (parcial, sin validación obligatoria) ======
+        // ====== PATCH ======
         [HttpPatch("{id:guid}")]
         public async Task<IActionResult> Patch(Guid id, [FromBody] PatchTareaDto dto)
         {
@@ -171,7 +186,7 @@ namespace ContaditoAuthBackend.Controllers
                 eliminada = t.Eliminada,
                 creado_en = t.CreadoEn,
                 actualizado_en = t.ActualizadoEn,
-                etiquetas = new List<object>() // si necesitas, carga etiquetas igual que en GET
+                etiquetas = new List<object>()
             };
 
             return Ok(outDto);
@@ -194,21 +209,18 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(new { ok = true });
         }
 
-        // DELETE /tareas/{id}  -> soft delete (eliminada=true)
+        // ====== DELETE (soft delete) ======
         [HttpDelete("{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var t = await (from tarea in _db.Tareas
                            join m in _db.Materias on tarea.MateriaId equals m.Id
-                           // opcional: verifica que la tarea pertenece al usuario autenticado
-                           // where m.UsuarioId == userIdActual
                            where tarea.Id == id
                            select tarea)
                           .FirstOrDefaultAsync();
 
             if (t == null) return NotFound();
 
-            // Soft delete
             t.Eliminada = true;
             await _db.SaveChangesAsync();
 

@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "i8oSN0HNcuw=",
+  "dgSpecHash": "KDDxPo+vKWc=",
   "success": true,
-  "projectFilePath": "C:\\Users\\diego\\Downloads\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj",
+  "projectFilePath": "C:\\Users\\diego\\Downloads\\guardar\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj",
   "expectedPackageFiles": [
+    "C:\\Users\\diego\\.nuget\\packages\\bcrypt.net-next\\4.0.3\\bcrypt.net-next.4.0.3.nupkg.sha512",
     "C:\\Users\\diego\\.nuget\\packages\\google.apis\\1.68.0\\google.apis.1.68.0.nupkg.sha512",
     "C:\\Users\\diego\\.nuget\\packages\\google.apis.auth\\1.68.0\\google.apis.auth.1.68.0.nupkg.sha512",
     "C:\\Users\\diego\\.nuget\\packages\\google.apis.core\\1.68.0\\google.apis.core.1.68.0.nupkg.sha512",

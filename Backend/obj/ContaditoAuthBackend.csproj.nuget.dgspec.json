@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\diego\\Downloads\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj": {}
+    "C:\\Users\\diego\\Downloads\\guardar\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj": {}
   },
   "projects": {
-    "C:\\Users\\diego\\Downloads\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj": {
+    "C:\\Users\\diego\\Downloads\\guardar\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\diego\\Downloads\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj",
+        "projectUniqueName": "C:\\Users\\diego\\Downloads\\guardar\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj",
         "projectName": "ContaditoAuthBackend",
-        "projectPath": "C:\\Users\\diego\\Downloads\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj",
+        "projectPath": "C:\\Users\\diego\\Downloads\\guardar\\Proyectofinalpow2\\Backend\\ContaditoAuthBackend.csproj",
         "packagesPath": "C:\\Users\\diego\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\diego\\Downloads\\Proyectofinalpow2\\Backend\\obj\\",
+        "outputPath": "C:\\Users\\diego\\Downloads\\guardar\\Proyectofinalpow2\\Backend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\diego\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -44,6 +44,10 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "BCrypt.Net-Next": {
+              "target": "Package",
+              "version": "[4.0.3, )"
+            },
             "Google.Apis.Auth": {
               "target": "Package",
               "version": "[1.68.0, )"

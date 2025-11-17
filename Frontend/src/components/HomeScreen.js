@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import "../App.css";
 import * as api from "./homescreen/api";
 import TutorialOverlay from "../components/TutorialOverlay";
@@ -12,7 +12,6 @@ const ORDENES = [
 export default function HomeScreen({ user, onLogout }) {
   const [materias, setMaterias] = useState([]);
   const [tareas, setTareas] = useState([]);
-  const [etiquetas, setEtiquetas] = useState([]);
   const [status, setStatus] = useState("");
   const [recordatorios, setRecordatorios] = useState({});
 
@@ -32,6 +31,22 @@ export default function HomeScreen({ user, onLogout }) {
     vence_en: "",
     prioridad: "Media",
   });
+
+  // Modal nueva materia
+  const [showNewMateria, setShowNewMateria] = useState(false);
+  const [newMateriaNombre, setNewMateriaNombre] = useState("");
+
+  // ======= IMPERSONACIÓN (admin) =======
+  const [isImpersonating, setIsImpersonating] = useState(false);
+
+  useEffect(() => {
+    try {
+      const realUser = localStorage.getItem("real_user");
+      setIsImpersonating(!!realUser);
+    } catch {
+      setIsImpersonating(false);
+    }
+  }, []);
 
   // ======= TUTORIAL =======
   const seenKey = "unitask_tutorial_seen";
@@ -83,12 +98,11 @@ export default function HomeScreen({ user, onLogout }) {
   ];
 
   useEffect(() => {
-    // Mostrar solo si nunca se ha visto
     try {
       const seen = localStorage.getItem(seenKey) === "1";
       if (!seen) setShowTour(true);
     } catch {
-      // si localStorage falla, no auto-abrimos
+      // ignore
     }
   }, []);
 
@@ -98,13 +112,11 @@ export default function HomeScreen({ user, onLogout }) {
       try {
         const m = await api.listMateriasMine();
         setMaterias(m);
+
         if (user?.id) {
-          const [t, e] = await Promise.all([
-            api.listTareas(user.id),
-            api.listEtiquetas(user.id),
-          ]);
+          const t = await api.listTareas(user.id);
           setTareas(t);
-          setEtiquetas(e);
+          // Si luego querés usar etiquetas, acá podrías cargarlas.
         }
       } catch (err) {
         setStatus(`Error cargando datos: ${err.message || err}`);
@@ -134,15 +146,46 @@ export default function HomeScreen({ user, onLogout }) {
   }, [tareas]);
 
   // ========= CRUD MATERIAS =========
-  const crearMateria = async () => {
-    const nombre = prompt("Nombre de la materia:");
-    if (!nombre) return;
+  const abrirNuevaMateria = () => {
+    setNewMateriaNombre("");
+    setShowNewMateria(true);
+  };
+
+  const guardarNuevaMateria = async (e) => {
+    e.preventDefault();
+    const nombre = newMateriaNombre.trim();
+    if (!nombre) {
+      setStatus("Ingresá un nombre para la materia.");
+      return;
+    }
     try {
       const created = await api.createMateria({ nombre });
       setMaterias((prev) => [created, ...prev]);
-      setStatus("Materia creada ✅");
+      setStatus("Materia creado ✅");
+      setShowNewMateria(false);
     } catch (err) {
       setStatus(`Error al crear materia: ${err.message || err}`);
+    }
+  };
+
+  const eliminarMateria = async (m) => {
+    if (!window.confirm(`¿Eliminar la materia "${m.nombre}"?`)) return;
+    try {
+      await api.deleteMateria(m.id);
+
+      setMaterias((prev) => prev.filter((x) => x.id !== m.id));
+
+      setFMateria((cur) => (cur === m.id ? "all" : cur));
+
+      setTareas((prev) =>
+        prev.map((t) =>
+          t.materia_id === m.id ? { ...t, materia_id: null } : t
+        )
+      );
+
+      setStatus("Materia eliminada ✅");
+    } catch (err) {
+      setStatus(`No se pudo eliminar la materia: ${err.message || err}`);
     }
   };
 
@@ -210,7 +253,7 @@ export default function HomeScreen({ user, onLogout }) {
   // ========= CRUD RECORDATORIOS =========
   const crearRecordatorio = async (tarea) => {
     const min = prompt("¿Cuántos minutos antes enviar el recordatorio?");
-    const n = parseInt(min);
+    const n = parseInt(min, 10);
     if (isNaN(n) || n <= 0) return alert("Ingresa un número válido (> 0).");
     try {
       const created = await api.createRecordatorio(tarea.id, n);
@@ -229,7 +272,9 @@ export default function HomeScreen({ user, onLogout }) {
       const upd = await api.patchRecordatorio(rec.id, { activo: !rec.activo });
       setRecordatorios((prev) => ({
         ...prev,
-        [tareaId]: prev[tareaId].map((r) => (r.id === rec.id ? { ...r, ...upd } : r)),
+        [tareaId]: prev[tareaId].map((r) =>
+          r.id === rec.id ? { ...r, ...upd } : r
+        ),
       }));
     } catch (err) {
       setStatus(`Error al actualizar recordatorio: ${err.message || err}`);
@@ -252,8 +297,10 @@ export default function HomeScreen({ user, onLogout }) {
   // ========= FILTROS / ORDEN =========
   const tareasFiltradas = useMemo(() => {
     let result = [...tareas];
-    if (fMateria !== "all") result = result.filter((t) => t.materia_id === fMateria);
-    if (fPrioridad !== "all") result = result.filter((t) => t.prioridad === fPrioridad);
+    if (fMateria !== "all")
+      result = result.filter((t) => t.materia_id === fMateria);
+    if (fPrioridad !== "all")
+      result = result.filter((t) => t.prioridad === fPrioridad);
     if (busqueda.trim()) {
       const q = busqueda.toLowerCase();
       result = result.filter(
@@ -293,29 +340,48 @@ export default function HomeScreen({ user, onLogout }) {
 
   // ========= NOTIFICACIONES =========
   const pollRef = useRef(null);
+
+  const notifiedKey = useCallback((id) => `ut_notif_${id}`, []);
+  const wasNotified = useCallback(
+    (id) => {
+      try {
+        return localStorage.getItem(notifiedKey(id)) === "1";
+      } catch {
+        return false;
+      }
+    },
+    [notifiedKey]
+  );
+  const markNotified = useCallback(
+    (id) => {
+      try {
+        localStorage.setItem(notifiedKey(id), "1");
+      } catch {}
+    },
+    [notifiedKey]
+  );
+
+  const showNotification = useCallback(
+    (t, mins) => {
+      const title = `⏰ ${t.titulo}`;
+      const body = `Vence ${new Date(t.vence_en).toLocaleTimeString()} • ${mins} min antes`;
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification(title, { body });
+        } catch {}
+      } else {
+        setStatus(`Recordatorio: ${t.titulo} (${mins} min antes)`);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (!("Notification" in window)) return;
     if (Notification.permission === "default") {
       Notification.requestPermission().catch(() => {});
     }
   }, []);
-
-  const notifiedKey = (id) => `ut_notif_${id}`;
-  const wasNotified = (id) => {
-    try { return localStorage.getItem(notifiedKey(id)) === "1"; } catch { return false; }
-  };
-  const markNotified = (id) => {
-    try { localStorage.setItem(notifiedKey(id), "1"); } catch {}
-  };
-  const showNotification = (t, mins) => {
-    const title = `⏰ ${t.titulo}`;
-    const body = `Vence ${new Date(t.vence_en).toLocaleTimeString()} • ${mins} min antes`;
-    if ("Notification" in window && Notification.permission === "granted") {
-      try { new Notification(title, { body }); } catch {}
-    } else {
-      setStatus(`Recordatorio: ${t.titulo} (${mins} min antes)`);
-    }
-  };
 
   useEffect(() => {
     const tick = () => {
@@ -324,7 +390,8 @@ export default function HomeScreen({ user, onLogout }) {
         if (t.eliminada || t.completada || t.silenciada) continue;
         for (const r of recordatorios[t.id] || []) {
           if (!r.activo || r.enviado_en || wasNotified(r.id)) continue;
-          const remindAt = new Date(t.vence_en).getTime() - r.minutos_antes * 60000;
+          const remindAt =
+            new Date(t.vence_en).getTime() - r.minutos_antes * 60000;
           if (now >= remindAt) {
             showNotification(t, r.minutos_antes);
             markNotified(r.id);
@@ -339,10 +406,65 @@ export default function HomeScreen({ user, onLogout }) {
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = null;
     };
-  }, [tareas, recordatorios]);
+  }, [tareas, recordatorios, wasNotified, showNotification, markNotified]);
+
+  // ========= IMPERSONACIÓN HANDLERS =========
+  const handleImpersonar = async () => {
+    if (user?.rol !== "admin") {
+      alert("Solo un admin puede usar esta opción.");
+      return;
+    }
+    const targetId = window.prompt(
+      "Pegá el ID (GUID) del usuario cuyo panel querés ver:"
+    );
+    if (!targetId) return;
+
+    try {
+      // Guardar el usuario real solo si aún no estamos impersonando
+      if (!isImpersonating) {
+        localStorage.setItem("real_user", JSON.stringify(user));
+        const realToken = localStorage.getItem("auth_token");
+        if (realToken) localStorage.setItem("real_auth_token", realToken);
+      }
+
+      const res = await api.impersonarUsuario(targetId);
+      localStorage.setItem("auth_token", res.token);
+      localStorage.setItem("user", JSON.stringify(res.user));
+
+      window.location.reload();
+    } catch (err) {
+      setStatus(
+        `No se pudo impersonar: ${err.message || "Error desconocido"}`
+      );
+    }
+  };
+
+  const handleStopImpersonation = () => {
+    try {
+      const realUserStr = localStorage.getItem("real_user");
+      const realToken = localStorage.getItem("real_auth_token");
+
+      if (realUserStr && realToken) {
+        localStorage.setItem("user", realUserStr);
+        localStorage.setItem("auth_token", realToken);
+      } else {
+        // fallback: salir de sesión
+        localStorage.removeItem("user");
+        localStorage.removeItem("auth_token");
+      }
+
+      localStorage.removeItem("real_user");
+      localStorage.removeItem("real_auth_token");
+
+      window.location.reload();
+    } catch {
+      window.location.reload();
+    }
+  };
 
   const PrioBadge = ({ p }) => {
-    const k = p === "Alta" ? "prio--high" : p === "Baja" ? "prio--low" : "prio--mid";
+    const k =
+      p === "Alta" ? "prio--high" : p === "Baja" ? "prio--low" : "prio--mid";
     return <span className={`prio ${k}`}>{p || "Media"}</span>;
   };
 
@@ -356,9 +478,11 @@ export default function HomeScreen({ user, onLogout }) {
     </button>
   );
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("real_user");
+    localStorage.removeItem("real_auth_token");
     onLogout?.();
   };
 
@@ -369,10 +493,24 @@ export default function HomeScreen({ user, onLogout }) {
         <div className="brand">
           <div className="brand__title">UniTask</div>
           <div className="brand__user" data-tour="sidebar-user">
-            <div className="badge">{(user?.nombre || user?.email || "U").slice(0,1).toUpperCase()}</div>
+            <div className="badge">
+              {(user?.nombre || user?.email || "U").slice(0, 1).toUpperCase()}
+            </div>
             <div>
-              <div style={{ fontWeight: 600 }}>{user?.nombre || "Usuario"}</div>
-              <div className="muted" style={{ fontSize: 12 }}>{user?.email}</div>
+              <div style={{ fontWeight: 600 }}>
+                {user?.nombre || "Usuario"}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {user?.email}
+              </div>
+              {isImpersonating && (
+                <div
+                  className="muted"
+                  style={{ fontSize: 11, color: "#f97316", marginTop: 2 }}
+                >
+                  Modo impersonación
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -382,30 +520,58 @@ export default function HomeScreen({ user, onLogout }) {
             <span>Materias</span>
             <button
               className="btn small outline"
-              onClick={crearMateria}
+              onClick={abrirNuevaMateria}
               data-tour="materias-nueva"
             >
               + Nueva
             </button>
           </div>
 
-          {!materias.length && <div className="empty">No tienes materias aún.</div>}
+          {!materias.length && (
+            <div className="empty">No tienes materias aún.</div>
+          )}
 
           {materias.map((m) => {
             const prog = progresoMateria[m.id] || { total: 0, done: 0 };
-            const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
+            const pct = prog.total
+              ? Math.round((prog.done / prog.total) * 100)
+              : 0;
             return (
               <button
                 key={m.id}
                 className={`pill ${fMateria === m.id ? "active" : ""}`}
-                onClick={() => setFMateria((cur) => (cur === m.id ? "all" : m.id))}
+                onClick={() =>
+                  setFMateria((cur) => (cur === m.id ? "all" : m.id))
+                }
               >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{m.nombre}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    {prog.done}/{prog.total} completadas
-                    <span className="progressbar"><span style={{ width: `${pct}%` }} /></span>
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: 8 }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{m.nombre}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {prog.done}/{prog.total} completadas
+                      <span className="progressbar">
+                        <span style={{ width: `${pct}%` }} />
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Botón borrar materia */}
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: 18,
+                      cursor: "pointer",
+                    }}
+                    title="Eliminar materia"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      eliminarMateria(m);
+                    }}
+                  >
+                    🗑️
+                  </span>
                 </div>
               </button>
             );
@@ -416,7 +582,27 @@ export default function HomeScreen({ user, onLogout }) {
           <button className="btn outline" onClick={() => setShowTour(true)}>
             Ver tutorial
           </button>
-          <button className="btn outline" onClick={handleLogout}>Cerrar sesión</button>
+
+          {/* Bloque IMPERSONAR */}
+          {user?.rol === "admin" && !isImpersonating && (
+            <button className="btn outline" onClick={handleImpersonar}>
+              Ver panel de otro usuario
+            </button>
+          )}
+
+          {isImpersonating && (
+            <button
+              className="btn outline"
+              style={{ borderColor: "#f97316", color: "#f97316" }}
+              onClick={handleStopImpersonation}
+            >
+              Volver a mi usuario real
+            </button>
+          )}
+
+          <button className="btn outline" onClick={handleLogoutClick}>
+            Cerrar sesión
+          </button>
         </div>
       </aside>
 
@@ -433,17 +619,32 @@ export default function HomeScreen({ user, onLogout }) {
           </div>
 
           <div className="filters" data-tour="filtros">
-            <select value={fPrioridad} onChange={(e) => setFPrioridad(e.target.value)}>
+            <select
+              value={fPrioridad}
+              onChange={(e) => setFPrioridad(e.target.value)}
+            >
               <option value="all">Todas las prioridades</option>
-              {PRIORIDADES.map((p) => <option key={p} value={p}>{p}</option>)}
+              {PRIORIDADES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
             </select>
 
             <select value={orden} onChange={(e) => setOrden(e.target.value)}>
-              {ORDENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+              {ORDENES.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
             </select>
 
             <label className="check">
-              <input type="checkbox" checked={asc} onChange={() => setAsc((a) => !a)} />
+              <input
+                type="checkbox"
+                checked={asc}
+                onChange={() => setAsc((a) => !a)}
+              />
               Ascendente
             </label>
           </div>
@@ -465,21 +666,40 @@ export default function HomeScreen({ user, onLogout }) {
             tareasFiltradas.map((t) => {
               const materia = materias.find((m) => m.id === t.materia_id);
               return (
-                <div key={t.id} className={`task ${t.completada ? "done" : ""}`}>
+                <div
+                  key={t.id}
+                  className={`task ${t.completada ? "done" : ""}`}
+                >
                   <div className="task__left">
-                    <input type="checkbox" checked={!!t.completada} onChange={() => toggleCompletada(t)} />
+                    <input
+                      type="checkbox"
+                      checked={!!t.completada}
+                      onChange={() => toggleCompletada(t)}
+                    />
                   </div>
 
                   <div>
                     <div className="task__header">
                       <strong>{t.titulo}</strong>
-                      <PrioBadge p={PRIORIDADES.includes(t.prioridad) ? t.prioridad : "Media"} />
-                      <span className="chip">vence {new Date(t.vence_en).toLocaleString()}</span>
+                      <PrioBadge
+                        p={
+                          PRIORIDADES.includes(t.prioridad)
+                            ? t.prioridad
+                            : "Media"
+                        }
+                      />
+                      <span className="chip">
+                        vence {new Date(t.vence_en).toLocaleString()}
+                      </span>
                     </div>
 
                     <div className="task__meta">
-                      <span className="chip">{materia?.nombre || "Sin materia"}</span>
-                      {!!t.descripcion && <div className="muted">{t.descripcion}</div>}
+                      <span className="chip">
+                        {materia?.nombre || "Sin materia"}
+                      </span>
+                      {!!t.descripcion && (
+                        <div className="muted">{t.descripcion}</div>
+                      )}
                     </div>
 
                     {/* ===== Recordatorios de esta tarea ===== */}
@@ -489,32 +709,74 @@ export default function HomeScreen({ user, onLogout }) {
                       data-tour="recordatorios"
                     >
                       <b>Recordatorios:</b>{" "}
-                      {(recordatorios[t.id] || []).length === 0 && <span className="muted">ninguno</span>}
-                      <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                      {(recordatorios[t.id] || []).length === 0 && (
+                        <span className="muted">ninguno</span>
+                      )}
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: 6,
+                          marginTop: 6,
+                        }}
+                      >
                         {(recordatorios[t.id] || []).map((r) => (
-                          <div key={r.id} className="rec-item" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <div
+                            key={r.id}
+                            className="rec-item"
+                            style={{
+                              display: "flex",
+                              gap: 8,
+                              alignItems: "center",
+                            }}
+                          >
                             <span>⏰ {r.minutos_antes} min</span>
-                            <button className="btn small" onClick={() => toggleRecordatorio(t.id, r)}>
+                            <button
+                              className="btn small"
+                              onClick={() => toggleRecordatorio(t.id, r)}
+                            >
                               {r.activo ? "Desactivar" : "Activar"}
                             </button>
-                            <button className="btn small outline" onClick={() => eliminarRecordatorio(t.id, r)}>
+                            <button
+                              className="btn small outline"
+                              onClick={() => eliminarRecordatorio(t.id, r)}
+                            >
                               Eliminar
                             </button>
-                            {r.enviado_en && <span className="muted" style={{ fontSize: 12 }}>
-                              enviado {new Date(r.enviado_en).toLocaleString()}
-                            </span>}
+                            {r.enviado_en && (
+                              <span
+                                className="muted"
+                                style={{ fontSize: 12 }}
+                              >
+                                enviado{" "}
+                                {new Date(r.enviado_en).toLocaleString()}
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>
-                      <button className="btn small outline" onClick={() => crearRecordatorio(t)} style={{ marginTop: 6 }}>
+                      <button
+                        className="btn small outline"
+                        onClick={() => crearRecordatorio(t)}
+                        style={{ marginTop: 6 }}
+                      >
                         + Añadir recordatorio
                       </button>
                     </div>
                   </div>
 
-                  <div className="task__actions" style={{ display: "grid", gap: 8 }}>
-                    <div onClick={() => toggleSilenciada(t)}><BellIcon active={t.silenciada} /></div>
-                    <button className="btn small outline" onClick={() => eliminarTarea(t)}>Eliminar tarea</button>
+                  <div
+                    className="task__actions"
+                    style={{ display: "grid", gap: 8 }}
+                  >
+                    <div onClick={() => toggleSilenciada(t)}>
+                      <BellIcon active={t.silenciada} />
+                    </div>
+                    <button
+                      className="btn small outline"
+                      onClick={() => eliminarTarea(t)}
+                    >
+                      Eliminar tarea
+                    </button>
                   </div>
                 </div>
               );
@@ -522,7 +784,11 @@ export default function HomeScreen({ user, onLogout }) {
           )}
         </div>
 
-        {status && <div className="status" style={{ margin: "0 18px 18px" }}>{status}</div>}
+        {status && (
+          <div className="status" style={{ margin: "0 18px 18px" }}>
+            {status}
+          </div>
+        )}
       </main>
 
       {/* ==== MODAL NUEVA TAREA ==== */}
@@ -530,8 +796,14 @@ export default function HomeScreen({ user, onLogout }) {
         <div
           className="modal"
           style={{
-            position: "fixed", inset: 0, display: "grid", placeItems: "center",
-            background: "rgba(2,6,23,.6)", backdropFilter: "blur(4px)", zIndex: 50, padding: 16,
+            position: "fixed",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            background: "rgba(2,6,23,.6)",
+            backdropFilter: "blur(4px)",
+            zIndex: 50,
+            padding: 16,
           }}
           onClick={() => setShowNewTask(false)}
         >
@@ -546,30 +818,152 @@ export default function HomeScreen({ user, onLogout }) {
             <label>Materia</label>
             <select
               value={newTask.materia_id}
-              onChange={(e) => setNewTask((s) => ({ ...s, materia_id: e.target.value }))}
+              onChange={(e) =>
+                setNewTask((s) => ({
+                  ...s,
+                  materia_id: e.target.value,
+                }))
+              }
               required
             >
-              <option value="" disabled>Selecciona una materia</option>
-              {materias.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+              <option value="" disabled>
+                Selecciona una materia
+              </option>
+              {materias.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nombre}
+                </option>
+              ))}
             </select>
 
             <label style={{ marginTop: 8 }}>Título</label>
-            <input value={newTask.titulo} onChange={(e) => setNewTask((s) => ({ ...s, titulo: e.target.value }))} required />
+            <input
+              value={newTask.titulo}
+              onChange={(e) =>
+                setNewTask((s) => ({
+                  ...s,
+                  titulo: e.target.value,
+                }))
+              }
+              required
+            />
 
             <label style={{ marginTop: 8 }}>Descripción</label>
-            <textarea rows={3} value={newTask.descripcion} onChange={(e) => setNewTask((s) => ({ ...s, descripcion: e.target.value }))} />
+            <textarea
+              rows={3}
+              value={newTask.descripcion}
+              onChange={(e) =>
+                setNewTask((s) => ({
+                  ...s,
+                  descripcion: e.target.value,
+                }))
+              }
+            />
 
             <label style={{ marginTop: 8 }}>Fecha/Hora de entrega</label>
-            <input type="datetime-local" value={newTask.vence_en} onChange={(e) => setNewTask((s) => ({ ...s, vence_en: e.target.value }))} required />
+            <input
+              type="datetime-local"
+              value={newTask.vence_en}
+              onChange={(e) =>
+                setNewTask((s) => ({
+                  ...s,
+                  vence_en: e.target.value,
+                }))
+              }
+              required
+            />
 
             <label style={{ marginTop: 8 }}>Prioridad</label>
-            <select value={newTask.prioridad} onChange={(e) => setNewTask((s) => ({ ...s, prioridad: e.target.value }))}>
-              {PRIORIDADES.map((p) => <option key={p} value={p}>{p}</option>)}
+            <select
+              value={newTask.prioridad}
+              onChange={(e) =>
+                setNewTask((s) => ({
+                  ...s,
+                  prioridad: e.target.value,
+                }))
+              }
+            >
+              {PRIORIDADES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
             </select>
 
-            <div className="row" style={{ marginTop: 14, justifyContent: "flex-end", gap: 8 }}>
-              <button type="button" className="btn outline" onClick={() => setShowNewTask(false)}>Cancelar</button>
-              <button type="submit" className="btn">Crear</button>
+            <div
+              className="row"
+              style={{
+                marginTop: 14,
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <button
+                type="button"
+                className="btn outline"
+                onClick={() => setShowNewTask(false)}
+              >
+                Cancelar
+              </button>
+              <button type="submit" className="btn">
+                Crear
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ==== MODAL NUEVA MATERIA ==== */}
+      {showNewMateria && (
+        <div
+          className="modal"
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            background: "rgba(2,6,23,.6)",
+            backdropFilter: "blur(4px)",
+            zIndex: 60,
+            padding: 16,
+          }}
+          onClick={() => setShowNewMateria(false)}
+        >
+          <form
+            className="card"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={guardarNuevaMateria}
+            style={{ maxWidth: 420, width: "100%" }}
+          >
+            <h3 style={{ marginTop: 0 }}>Nueva materia</h3>
+
+            <label>Nombre de la materia</label>
+            <input
+              type="text"
+              value={newMateriaNombre}
+              onChange={(e) => setNewMateriaNombre(e.target.value)}
+              placeholder="Ej: Cálculo II"
+              required
+            />
+
+            <div
+              className="row"
+              style={{
+                marginTop: 14,
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <button
+                type="button"
+                className="btn outline"
+                onClick={() => setShowNewMateria(false)}
+              >
+                Cancelar
+              </button>
+              <button type="submit" className="btn">
+                Crear materia
+              </button>
             </div>
           </form>
         </div>

@@ -2,11 +2,10 @@ using ContaditoAuthBackend.Data;
 using ContaditoAuthBackend.Helpers;
 using ContaditoAuthBackend.Models;
 using Google.Apis.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using Microsoft.IdentityModel.Tokens;
 
 namespace ContaditoAuthBackend.Controllers
 {
@@ -23,11 +22,150 @@ namespace ContaditoAuthBackend.Controllers
             _cfg = cfg;
         }
 
+        // ============================
+        // DTOs
+        // ============================
         public class GoogleLoginDto
         {
             public string Credential { get; set; } = string.Empty; // id_token
         }
 
+        public class RegisterDto
+        {
+            public string Nombre { get; set; } = string.Empty;
+            public string Email { get; set; } = string.Empty;
+            public string Password { get; set; } = string.Empty;
+        }
+
+        public class LoginDto
+        {
+            public string Email { get; set; } = string.Empty;
+            public string Password { get; set; } = string.Empty;
+        }
+
+        public class ImpersonarDto
+        {
+            public Guid UsuarioId { get; set; }
+        }
+
+        // ============================
+        // REGISTER (LOCAL)
+        // POST /auth/register
+        // ============================
+        [HttpPost("register")]
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> Register([FromBody] RegisterDto dto)
+        {
+            var email = (dto.Email ?? string.Empty).Trim().ToLower();
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(dto.Password))
+                return BadRequest(new { message = "Correo y contraseña son requeridos" });
+
+            var exists = await _db.Usuarios.AnyAsync(u => u.Email == email);
+            if (exists)
+                return Conflict(new { message = "Ya existe un usuario registrado con ese correo" });
+
+            var user = new Usuario
+            {
+                Id = Guid.NewGuid(),
+                Nombre = dto.Nombre?.Trim(),
+                Email = email,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
+                Timezone = "America/Managua",
+                Locale = "es",
+                AuthProvider = "local",
+                GoogleSub = null,
+                EmailVerified = false,
+                Rol = "usuario",
+                CreadoEn = DateTime.UtcNow,
+                ActualizadoEn = DateTime.UtcNow,
+                LastLogin = DateTime.UtcNow
+            };
+
+            _db.Usuarios.Add(user);
+            await _db.SaveChangesAsync();
+
+            var jwt = JwtHelper.CreateJwt(user, _cfg);
+
+            // Cookie HTTP-only
+            Response.Cookies.Append("auth_token", jwt, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Expires = DateTimeOffset.UtcNow.AddDays(7)
+            });
+
+            return Ok(new
+            {
+                token = jwt,
+                user = new
+                {
+                    id = user.Id,
+                    nombre = user.Nombre,
+                    email = user.Email,
+                    provider = user.AuthProvider,
+                    rol = user.Rol
+                }
+            });
+        }
+
+        // ============================
+        // LOGIN (LOCAL)
+        // POST /auth/login
+        // ============================
+        [HttpPost("login")]
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> Login([FromBody] LoginDto dto)
+        {
+            var email = (dto.Email ?? string.Empty).Trim().ToLower();
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(dto.Password))
+                return Unauthorized(new { message = "Credenciales inválidas" });
+
+            // Solo usuarios locales (no Google)
+            var user = await _db.Usuarios
+                .FirstOrDefaultAsync(u => u.Email == email && u.AuthProvider == "local");
+
+            if (user == null || string.IsNullOrEmpty(user.PasswordHash))
+                return Unauthorized(new { message = "Correo o contraseña incorrectos" });
+
+            var ok = BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash);
+            if (!ok)
+                return Unauthorized(new { message = "Correo o contraseña incorrectos" });
+
+            user.LastLogin = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            var jwt = JwtHelper.CreateJwt(user, _cfg);
+
+            Response.Cookies.Append("auth_token", jwt, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Expires = DateTimeOffset.UtcNow.AddDays(7)
+            });
+
+            return Ok(new
+            {
+                token = jwt,
+                user = new
+                {
+                    id = user.Id,
+                    nombre = user.Nombre,
+                    email = user.Email,
+                    provider = user.AuthProvider,
+                    rol = user.Rol
+                }
+            });
+        }
+
+        // ============================
+        // GOOGLE LOGIN
+        // POST /auth/google
+        // ============================
         [HttpPost("google")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -71,12 +209,13 @@ namespace ContaditoAuthBackend.Controllers
                     Id = Guid.NewGuid(),
                     Nombre = payload.Name,
                     Email = email,
-                    PasswordHash = string.Empty,          // no requerido para Google
+                    PasswordHash = string.Empty,
                     Timezone = "America/Managua",
                     Locale = "es",
                     AuthProvider = "google",
                     GoogleSub = googleSub,
-                    EmailVerified = payload.EmailVerified, // <-- bool directo
+                    EmailVerified = payload.EmailVerified,
+                    Rol = "usuario",
                     CreadoEn = DateTime.UtcNow,
                     ActualizadoEn = DateTime.UtcNow
                 };
@@ -84,10 +223,9 @@ namespace ContaditoAuthBackend.Controllers
             }
             else
             {
-                // Actualizar metadata y enlazar Google si faltaba
                 user.AuthProvider = "google";
                 user.GoogleSub ??= googleSub;
-                user.EmailVerified = payload.EmailVerified; // <-- bool directo
+                user.EmailVerified = payload.EmailVerified;
                 if (string.IsNullOrWhiteSpace(user.Nombre))
                     user.Nombre = payload.Name;
                 user.ActualizadoEn = DateTime.UtcNow;
@@ -98,7 +236,7 @@ namespace ContaditoAuthBackend.Controllers
 
             var jwt = JwtHelper.CreateJwt(user, _cfg);
 
-            // Cookie HTTP-Only opcional (útil para web)
+            // Cookie HTTP-Only
             Response.Cookies.Append("auth_token", jwt, new CookieOptions
             {
                 HttpOnly = true,
@@ -110,7 +248,64 @@ namespace ContaditoAuthBackend.Controllers
             return Ok(new
             {
                 token = jwt,
-                user = new { id = user.Id, nombre = user.Nombre, email = user.Email, provider = user.AuthProvider }
+                user = new
+                {
+                    id = user.Id,
+                    nombre = user.Nombre,
+                    email = user.Email,
+                    provider = user.AuthProvider,
+                    rol = user.Rol
+                }
+            });
+        }
+
+        // ============================
+        // IMPERSONAR (solo admin)
+        // POST /auth/impersonar
+        // ============================
+        [HttpPost("impersonar")]
+        [Authorize]
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> Impersonar([FromBody] ImpersonarDto dto)
+        {
+            var uidStr = User.FindFirstValue("uid");
+            var rol = User.FindFirstValue("rol") ?? "usuario";
+
+            if (!Guid.TryParse(uidStr, out var adminId))
+                return Unauthorized(new { message = "Token inválido (sin uid)" });
+
+            // 🔐 Seguridad real: solo admin puede impersonar
+            if (rol != "admin")
+                return Forbid();
+
+            var target = await _db.Usuarios.FindAsync(dto.UsuarioId);
+            if (target == null)
+                return NotFound(new { message = "Usuario destino no existe" });
+
+            var jwt = JwtHelper.CreateJwt(target, _cfg, impersonatedBy: adminId);
+
+            // Podés también ponerlo en cookie para que siga igual que el login
+            Response.Cookies.Append("auth_token", jwt, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.None,
+                Expires = DateTimeOffset.UtcNow.AddHours(8)
+            });
+
+            return Ok(new
+            {
+                token = jwt,
+                user = new
+                {
+                    id = target.Id,
+                    nombre = target.Nombre,
+                    email = target.Email,
+                    provider = target.AuthProvider,
+                    rol = target.Rol
+                }
             });
         }
     }
