@@ -130,7 +130,7 @@ http://localhost:3000/
 Debe cumplirse:
 
 - API en http://localhost:5000
-- Frontend en http://localhost:5173
+- Frontend en http://localhost:3000
 
 Asegurar uso de:
 
@@ -140,4 +140,4 @@ const API_BASE = "http://localhost:5000";
 
 ---
 
-Archivo generado automáticamente.
+
