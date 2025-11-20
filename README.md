@@ -114,13 +114,13 @@ npm install
 ## 3. Ejecutar frontend
 
 ```bash
-npm run dev
+npm run start
 ```
 
 Abrir en el navegador:
 
 ```
-http://localhost:5173/
+http://localhost:3000/
 ```
 
 ---
